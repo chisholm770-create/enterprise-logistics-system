@@ -1,0 +1,103 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: logistics_postgres
+    environment:
+      POSTGRES_USER: logistics_user
+      POSTGRES_PASSWORD: logistics_pass
+      POSTGRES_DB: logistics_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    networks:
+      - logistics_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: logistics_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - logistics_network
+
+  node:
+    build:
+      context: ./backend/node
+      dockerfile: Dockerfile
+    container_name: logistics_node
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgresql://logistics_user:logistics_pass@postgres:5432/logistics_db
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: your_jwt_secret_here
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - logistics_network
+
+  python:
+    build:
+      context: ./services/python
+      dockerfile: Dockerfile
+    container_name: logistics_python
+    environment:
+      FLASK_ENV: development
+      PYTHONUNBUFFERED: 1
+    ports:
+      - "5000:5000"
+    networks:
+      - logistics_network
+
+  go:
+    build:
+      context: ./services/go
+      dockerfile: Dockerfile
+    container_name: logistics_go
+    environment:
+      PORT: 8080
+    ports:
+      - "8080:8080"
+    networks:
+      - logistics_network
+
+  react:
+    build:
+      context: ./frontend/react
+      dockerfile: Dockerfile
+    container_name: logistics_react
+    environment:
+      REACT_APP_API_URL: http://localhost:3000
+      REACT_APP_WS_URL: ws://localhost:8080
+    ports:
+      - "3001:3000"
+    depends_on:
+      - node
+    networks:
+      - logistics_network
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: logistics_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - logistics_network
+
+networks:
+  logistics_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
